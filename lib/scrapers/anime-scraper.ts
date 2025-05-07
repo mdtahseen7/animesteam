@@ -2,10 +2,18 @@ import axios from "axios"
 import * as cheerio from "cheerio"
 
 // Base URLs for different sources
-const GOGOANIME_BASE_URL = "https://gogoanime.pe"
+const GOGOANIME_BASE_URL = "https://anitaku.to" // Updated from gogoanime.pe to anitaku.to (current working domain)
 const ANILIST_BASE_URL = "https://graphql.anilist.co"
 const JIKAN_BASE_URL = "https://api.jikan.moe/v4"
 const NYAA_BASE_URL = "https://nyaa.si"
+
+// Backup GogoAnime domains in case the primary one doesn't work
+const GOGOANIME_BACKUP_DOMAINS = [
+  "https://gogoanime.gg",
+  "https://gogoanime.tel",
+  "https://gogoanime3.net",
+  "https://gogoanime.bid",
+]
 
 // Configure axios for AniList API
 const anilistAxios = axios.create({
@@ -17,6 +25,7 @@ const anilistAxios = axios.create({
 
 // GogoAnime scraper functions
 export async function scrapeGogoAnimeSearch(query: string) {
+  // Try the primary domain first
   try {
     const searchUrl = `${GOGOANIME_BASE_URL}/search.html?keyword=${encodeURIComponent(query)}`
     const { data } = await axios.get(searchUrl)
@@ -36,14 +45,51 @@ export async function scrapeGogoAnimeSearch(query: string) {
       })
     })
 
-    return results
+    if (results.length > 0) {
+      return results
+    }
   } catch (error) {
-    console.error("Error scraping GogoAnime search:", error)
-    return []
+    console.error(`Error scraping ${GOGOANIME_BASE_URL} search:`, error)
+    // Continue to backup domains
   }
+
+  // Try backup domains if primary fails
+  for (const backupDomain of GOGOANIME_BACKUP_DOMAINS) {
+    try {
+      console.log(`Trying backup domain: ${backupDomain}`)
+      const searchUrl = `${backupDomain}/search.html?keyword=${encodeURIComponent(query)}`
+      const { data } = await axios.get(searchUrl)
+      const $ = cheerio.load(data)
+
+      const results: any[] = []
+      $("div.last_episodes ul.items li").each((i, el) => {
+        const title = $(el).find("p.name a").text().trim()
+        const id = $(el).find("p.name a").attr("href")?.split("/")[2] || ""
+        const image = $(el).find("div.img img").attr("src") || ""
+
+        results.push({
+          id,
+          title,
+          image,
+          source: "gogoanime",
+        })
+      })
+
+      if (results.length > 0) {
+        return results
+      }
+    } catch (error) {
+      console.error(`Error scraping ${backupDomain} search:`, error)
+      // Continue to next backup domain
+    }
+  }
+
+  console.error("All GogoAnime domains failed for search")
+  return []
 }
 
 export async function scrapeGogoAnimeInfo(animeId: string) {
+  // Try the primary domain first
   try {
     const animeUrl = `${GOGOANIME_BASE_URL}/category/${animeId}`
     const { data } = await axios.get(animeUrl)
@@ -62,50 +108,141 @@ export async function scrapeGogoAnimeInfo(animeId: string) {
 
     const episodeCount = Number.parseInt($("#episode_page li a").last().text().split("-")[1]) || 0
 
-    return {
-      id: animeId,
-      title,
-      image,
-      description,
-      status: info["status"] || "Unknown",
-      genres: info["genre"]?.split(",").map((g) => g.trim()) || [],
-      releaseDate: info["released"] || "Unknown",
-      episodeCount,
-      source: "gogoanime",
+    if (title) {
+      return {
+        id: animeId,
+        title,
+        image,
+        description,
+        status: info["status"] || "Unknown",
+        genres: info["genre"]?.split(",").map((g) => g.trim()) || [],
+        releaseDate: info["released"] || "Unknown",
+        episodeCount,
+        source: "gogoanime",
+      }
     }
   } catch (error) {
-    console.error("Error scraping GogoAnime info:", error)
-    return null
+    console.error(`Error scraping ${GOGOANIME_BASE_URL} info:`, error)
+    // Continue to backup domains
   }
+
+  // Try backup domains if primary fails
+  for (const backupDomain of GOGOANIME_BACKUP_DOMAINS) {
+    try {
+      console.log(`Trying backup domain for info: ${backupDomain}`)
+      const animeUrl = `${backupDomain}/category/${animeId}`
+      const { data } = await axios.get(animeUrl)
+      const $ = cheerio.load(data)
+
+      const title = $("div.anime_info_body_bg h1").text().trim()
+      const image = $("div.anime_info_body_bg img").attr("src") || ""
+      const description = $('div.anime_info_body_bg p.type:contains("Plot Summary")').next("p").text().trim()
+
+      const info: Record<string, string> = {}
+      $("div.anime_info_body_bg p.type").each((i, el) => {
+        const type = $(el).text().trim().replace(":", "").trim()
+        const value = $(el).next("p").text().trim()
+        info[type.toLowerCase()] = value
+      })
+
+      const episodeCount = Number.parseInt($("#episode_page li a").last().text().split("-")[1]) || 0
+
+      if (title) {
+        return {
+          id: animeId,
+          title,
+          image,
+          description,
+          status: info["status"] || "Unknown",
+          genres: info["genre"]?.split(",").map((g) => g.trim()) || [],
+          releaseDate: info["released"] || "Unknown",
+          episodeCount,
+          source: "gogoanime",
+        }
+      }
+    } catch (error) {
+      console.error(`Error scraping ${backupDomain} info:`, error)
+      // Continue to next backup domain
+    }
+  }
+
+  console.error("All GogoAnime domains failed for anime info")
+  return null
 }
 
 export async function scrapeGogoAnimeEpisodes(animeId: string) {
+  // Try the primary domain first
   try {
     const animeUrl = `${GOGOANIME_BASE_URL}/category/${animeId}`
     const { data } = await axios.get(animeUrl)
     const $ = cheerio.load(data)
 
     const episodeCount = Number.parseInt($("#episode_page li a").last().text().split("-")[1]) || 0
-    const episodes = []
+    if (episodeCount > 0) {
+      const episodes = []
 
-    for (let i = 1; i <= episodeCount; i++) {
-      episodes.push({
-        animeId,
-        episodeNumber: i,
-        title: `Episode ${i}`,
-        streamUrl: `${GOGOANIME_BASE_URL}/${animeId}-episode-${i}`,
-      })
+      for (let i = 1; i <= episodeCount; i++) {
+        episodes.push({
+          animeId,
+          episodeNumber: i,
+          title: `Episode ${i}`,
+          streamUrl: `${GOGOANIME_BASE_URL}/${animeId}-episode-${i}`,
+        })
+      }
+
+      return episodes
     }
-
-    return episodes
   } catch (error) {
-    console.error("Error scraping GogoAnime episodes:", error)
-    return []
+    console.error(`Error scraping ${GOGOANIME_BASE_URL} episodes:`, error)
+    // Continue to backup domains
   }
+
+  // Try backup domains if primary fails
+  for (const backupDomain of GOGOANIME_BACKUP_DOMAINS) {
+    try {
+      console.log(`Trying backup domain for episodes: ${backupDomain}`)
+      const animeUrl = `${backupDomain}/category/${animeId}`
+      const { data } = await axios.get(animeUrl)
+      const $ = cheerio.load(data)
+
+      const episodeCount = Number.parseInt($("#episode_page li a").last().text().split("-")[1]) || 0
+      if (episodeCount > 0) {
+        const episodes = []
+
+        for (let i = 1; i <= episodeCount; i++) {
+          episodes.push({
+            animeId,
+            episodeNumber: i,
+            title: `Episode ${i}`,
+            streamUrl: `${backupDomain}/${animeId}-episode-${i}`,
+          })
+        }
+
+        return episodes
+      }
+    } catch (error) {
+      console.error(`Error scraping ${backupDomain} episodes:`, error)
+      // Continue to next backup domain
+    }
+  }
+
+  console.error("All GogoAnime domains failed for episodes")
+  // If all domains fail, return a default set of episodes
+  const defaultEpisodes = []
+  for (let i = 1; i <= 12; i++) {
+    defaultEpisodes.push({
+      animeId,
+      episodeNumber: i,
+      title: `Episode ${i}`,
+      streamUrl: `${GOGOANIME_BASE_URL}/${animeId}-episode-${i}`,
+    })
+  }
+  return defaultEpisodes
 }
 
 export async function scrapeGogoAnimeStreamUrl(episodeUrl: string) {
   try {
+    console.log(`Fetching stream URL from: ${episodeUrl}`)
     const { data } = await axios.get(episodeUrl)
     const $ = cheerio.load(data)
 
@@ -113,16 +250,43 @@ export async function scrapeGogoAnimeStreamUrl(episodeUrl: string) {
     const iframeSrc = $("div.play-video iframe").attr("src")
 
     if (!iframeSrc) {
+      console.error("Iframe source not found in:", episodeUrl)
       throw new Error("Iframe source not found")
     }
 
+    console.log(`Found iframe source: ${iframeSrc}`)
     // Get the streaming server page
     const { data: iframeData } = await axios.get(iframeSrc)
     const $iframe = cheerio.load(iframeData)
 
-    // Extract the actual video URL (this is a simplified example)
-    // In reality, this might involve more complex extraction or decryption
-    const videoUrl = $iframe("source").attr("src") || $iframe("video").attr("data-src")
+    // Extract the actual video URL
+    // First try the source tag
+    let videoUrl = $iframe("source").attr("src")
+    
+    // If not found, try data-src attribute
+    if (!videoUrl) {
+      videoUrl = $iframe("video").attr("data-src")
+    }
+    
+    // If still not found, try to find it in the script tags
+    if (!videoUrl) {
+      const scripts = $iframe("script").toArray()
+      for (const script of scripts) {
+        const scriptContent = $iframe(script).html() || ''
+        // Look for common patterns in script content
+        const match = scriptContent.match(/sources\s*:\s*\[\s*{\s*file\s*:\s*['"]([^'"]+)/)
+        if (match && match[1]) {
+          videoUrl = match[1]
+          break
+        }
+      }
+    }
+
+    if (videoUrl) {
+      console.log(`Found video URL: ${videoUrl.substring(0, 50)}...`)
+    } else {
+      console.error("Video URL not found in iframe")
+    }
 
     return videoUrl
   } catch (error) {

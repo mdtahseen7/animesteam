@@ -84,13 +84,22 @@ TableHead.displayName = "TableHead"
 const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
-  <td
-    ref={ref}
-    className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
-    {...props}
-  />
-))
+>(({ className, children, ...props }, ref) => {
+  // Process children to handle potential HTML strings
+  const processedChildren = typeof children === 'string' 
+    ? children.replace(/<[^>]*>/g, '') // Strip HTML tags from string content
+    : children;
+    
+  return (
+    <td
+      ref={ref}
+      className={cn("p-3 align-middle [&:has([role=checkbox])]:pr-0", className)}
+      {...props}
+    >
+      {processedChildren}
+    </td>
+  );
+})
 TableCell.displayName = "TableCell"
 
 const TableCaption = React.forwardRef<

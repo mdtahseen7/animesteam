@@ -47,21 +47,43 @@ CardTitle.displayName = "CardTitle"
 const CardDescription = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
-  />
-))
+>(({ className, children, ...props }, ref) => {
+  // Process children to handle potential HTML strings
+  const processedChildren = typeof children === 'string' 
+    ? children.replace(/<[^>]*>/g, '') // Strip HTML tags from string content
+    : children;
+    
+  return (
+    <div
+      ref={ref}
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    >
+      {processedChildren}
+    </div>
+  );
+})
 CardDescription.displayName = "CardDescription"
 
 const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
-))
+>(({ className, children, ...props }, ref) => {
+  // Process children to handle potential HTML strings
+  const processedChildren = typeof children === 'string' 
+    ? children.replace(/<[^>]*>/g, '') // Strip HTML tags from string content
+    : children;
+    
+  return (
+    <div 
+      ref={ref} 
+      className={cn("p-5 pt-0", className)} 
+      {...props}
+    >
+      {processedChildren}
+    </div>
+  );
+})
 CardContent.displayName = "CardContent"
 
 const CardFooter = React.forwardRef<

@@ -7,7 +7,7 @@ import { AnimeDetails } from "@/components/anime-details"
 import { EpisodeList } from "@/components/episode-list"
 import { RelatedAnime } from "@/components/related-anime"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getAnimeById } from "@/lib/firebase/server"
+import { getAnimeDetails } from "@/lib/anime-service"
 
 interface AnimePageProps {
   params: {
@@ -17,7 +17,7 @@ interface AnimePageProps {
 
 export async function generateMetadata({ params }: AnimePageProps): Promise<Metadata> {
   try {
-    const anime = await getAnimeById(params.id)
+    const anime = await getAnimeDetails(params.id)
 
     if (!anime) {
       return {
@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: AnimePageProps): Promise<Meta
 
 export default async function AnimePage({ params }: AnimePageProps) {
   try {
-    const anime = await getAnimeById(params.id)
+    const anime = await getAnimeDetails(params.id)
 
     if (!anime) {
       notFound()
@@ -72,6 +72,7 @@ export default async function AnimePage({ params }: AnimePageProps) {
       </main>
     )
   } catch (error) {
+    console.error("Error in anime page:", error);
     notFound()
   }
 }

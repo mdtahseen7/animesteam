@@ -7,7 +7,7 @@ import { VideoPlayer } from "@/components/video-player"
 import { EpisodeNavigation } from "@/components/episode-navigation"
 import { Comments } from "@/components/comments"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getAnimeById, getEpisodeByNumber } from "@/lib/firebase/server"
+import { getAnimeDetails, getEpisodeDetails } from "@/lib/anime-service"
 
 interface WatchPageProps {
   params: {
@@ -18,7 +18,7 @@ interface WatchPageProps {
 
 export async function generateMetadata({ params }: WatchPageProps): Promise<Metadata> {
   try {
-    const anime = await getAnimeById(params.animeId)
+    const anime = await getAnimeDetails(params.animeId)
     const episodeNumber = Number.parseInt(params.episode)
 
     if (!anime) {
@@ -41,8 +41,8 @@ export async function generateMetadata({ params }: WatchPageProps): Promise<Meta
 export default async function WatchPage({ params }: WatchPageProps) {
   try {
     const episodeNumber = Number.parseInt(params.episode)
-    const anime = await getAnimeById(params.animeId)
-    const episode = await getEpisodeByNumber(params.animeId, episodeNumber)
+    const anime = await getAnimeDetails(params.animeId)
+    const episode = await getEpisodeDetails(params.animeId, episodeNumber)
 
     if (!anime || !episode) {
       notFound()
@@ -59,7 +59,7 @@ export default async function WatchPage({ params }: WatchPageProps) {
 
           <Suspense fallback={<VideoPlayerSkeleton />}>
             <VideoPlayer
-              animeId={params.animeId}
+              animeId={anime.id}
               episodeId={episode.id}
               episodeNumber={episodeNumber}
               streamUrl={episode.streamUrl}
@@ -68,7 +68,7 @@ export default async function WatchPage({ params }: WatchPageProps) {
 
           <Suspense fallback={<EpisodeNavigationSkeleton />}>
             <EpisodeNavigation
-              animeId={params.animeId}
+              animeId={anime.id}
               currentEpisode={episodeNumber}
               totalEpisodes={anime.episodeCount}
             />
@@ -76,7 +76,7 @@ export default async function WatchPage({ params }: WatchPageProps) {
 
           <div className="mt-8">
             <Suspense fallback={<CommentsSkeleton />}>
-              <Comments animeId={params.animeId} episodeId={episode.id} />
+              <Comments animeId={anime.id} episodeId={episode.id} />
             </Suspense>
           </div>
         </div>

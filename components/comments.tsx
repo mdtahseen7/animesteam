@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth-hooks"
 import { useToast } from "@/hooks/use-toast"
-import { getComments, addComment } from "@/lib/firebase/client"
 import { formatDistanceToNow } from "date-fns"
+import { nanoid } from "nanoid"
 
 interface Comment {
   id: string
@@ -34,21 +34,35 @@ export function Comments({ animeId, episodeId }: CommentsProps) {
   const { toast } = useToast()
 
   useEffect(() => {
-    const fetchComments = async () => {
+    const fetchComments = () => {
       try {
-        const commentList = await getComments(animeId, episodeId)
-        setComments(commentList)
+        // Use localStorage instead of Firebase
+        const storageKey = `comments-${animeId}-${episodeId}`
+        const storedComments = localStorage.getItem(storageKey)
+        
+        if (storedComments) {
+          setComments(JSON.parse(storedComments))
+        } else {
+          // Default empty comments array
+          setComments([])
+        }
       } catch (error) {
         console.error("Error fetching comments:", error)
+        setComments([])
       } finally {
         setLoading(false)
       }
     }
 
-    fetchComments()
+    // Only run in the browser
+    if (typeof window !== 'undefined') {
+      fetchComments()
+    } else {
+      setLoading(false)
+    }
   }, [animeId, episodeId])
 
-  const handleSubmitComment = async (e: React.FormEvent) => {
+  const handleSubmitComment = (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!user) {
@@ -66,14 +80,33 @@ export function Comments({ animeId, episodeId }: CommentsProps) {
 
     setSubmitting(true)
     try {
-      const comment = await addComment(animeId, episodeId, user.uid, newComment)
-      setComments([comment, ...comments])
+      // Create a new comment object
+      const newCommentObj: Comment = {
+        id: nanoid(),
+        userId: user.uid,
+        username: user.displayName || user.email?.split('@')[0] || 'Anonymous',
+        userAvatar: user.photoURL || undefined,
+        text: newComment,
+        createdAt: new Date().toISOString()
+      }
+      
+      // Update state with new comment
+      const updatedComments = [newCommentObj, ...comments]
+      setComments(updatedComments)
+      
+      // Save to localStorage
+      const storageKey = `comments-${animeId}-${episodeId}`
+      localStorage.setItem(storageKey, JSON.stringify(updatedComments))
+      
+      // Clear input
       setNewComment("")
+      
       toast({
         title: "Comment posted",
         description: "Your comment has been posted successfully",
       })
     } catch (error) {
+      console.error("Error posting comment:", error)
       toast({
         title: "Error",
         description: "Failed to post comment",

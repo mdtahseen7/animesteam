@@ -2,20 +2,34 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-hooks"
-import { updateWatchHistory } from "@/lib/firebase/client"
 import { AlertCircle, ExternalLink } from "lucide-react"
-import Plyr from "plyr-react"
+
+// Dynamically import Plyr to avoid SSR issues
+const Plyr = dynamic(() => import("plyr-react").then((mod) => mod.default), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full aspect-video bg-card/30 rounded-lg flex items-center justify-center">
+      <div className="text-center">
+        <Skeleton className="h-8 w-48 mx-auto mb-4" />
+        <p className="text-muted-foreground">Loading video player...</p>
+      </div>
+    </div>
+  ),
+})
+
+// Import CSS in a way that works with SSR
 import "plyr-react/plyr.css"
 
 interface VideoPlayerProps {
   animeId: string
   episodeId: string
   episodeNumber: number
-  streamUrl: string
+  streamUrl?: string
 }
 
 export function VideoPlayer({ animeId, episodeId, episodeNumber, streamUrl }: VideoPlayerProps) {
@@ -37,23 +51,38 @@ export function VideoPlayer({ animeId, episodeId, episodeNumber, streamUrl }: Vi
   }, [episodeId])
 
   useEffect(() => {
-    const updateHistory = async () => {
+    const updateHistory = () => {
       if (user && !watchHistoryUpdated.current) {
         try {
-          await updateWatchHistory(user.uid, animeId, episodeNumber)
-          watchHistoryUpdated.current = true
+          // Update watch history in localStorage
+          const historyKey = `watchHistory-${user.uid}-${animeId}`;
+          let history: number[] = [];
+          
+          // Get existing history
+          const storedHistory = localStorage.getItem(historyKey);
+          if (storedHistory) {
+            history = JSON.parse(storedHistory);
+          }
+          
+          // Add current episode if not already in history
+          if (!history.includes(episodeNumber)) {
+            history.push(episodeNumber);
+            localStorage.setItem(historyKey, JSON.stringify(history));
+          }
+          
+          watchHistoryUpdated.current = true;
         } catch (error) {
-          console.error("Failed to update watch history:", error)
+          console.error("Failed to update watch history:", error);
         }
       }
-    }
+    };
 
     // Update watch history after 30 seconds of watching
     const timer = setTimeout(() => {
-      updateHistory()
-    }, 30000)
+      updateHistory();
+    }, 30000);
 
-    return () => clearTimeout(timer)
+    return () => clearTimeout(timer);
   }, [user, animeId, episodeNumber])
 
   useEffect(() => {
@@ -103,7 +132,12 @@ export function VideoPlayer({ animeId, episodeId, episodeNumber, streamUrl }: Vi
   if (fallbackMode) {
     return (
       <div className="video-player-container mb-6">
-        <iframe src={streamUrl} allowFullScreen title={`Episode ${episodeNumber}`} className="rounded-lg"></iframe>
+        <iframe 
+          src={streamUrl || `/api/stream/${animeId}/${episodeNumber}`} 
+          allowFullScreen 
+          title={`Episode ${episodeNumber}`} 
+          className="rounded-lg"
+        ></iframe>
       </div>
     )
   }
@@ -117,7 +151,7 @@ export function VideoPlayer({ animeId, episodeId, episodeNumber, streamUrl }: Vi
             type: "video",
             sources: [
               {
-                src: streamUrl,
+                src: streamUrl || `/api/stream/${animeId}/${episodeNumber}`,
                 type: "video/mp4",
               },
             ],
