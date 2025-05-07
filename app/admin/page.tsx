@@ -2,7 +2,6 @@ import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
-import { AdminDashboard } from "@/components/admin/dashboard"
 import { verifyAdminSession } from "@/lib/firebase/admin-auth"
 
 export default async function AdminPage() {
